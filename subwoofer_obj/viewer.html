@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SW-12 Subwoofer | Three.js Viewer</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #050506; }
+  body { font-family: "Segoe UI", Inter, Arial, sans-serif; color: #e8e8ea; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  .vignette {
+    pointer-events: none; position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 50% 42%, rgba(255,255,255,0.035), transparent 42%),
+                radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(0,0,0,0.55) 100%);
+  }
+  .hud {
+    position: fixed; left: 34px; top: 30px; pointer-events: none;
+    text-transform: uppercase; letter-spacing: 0.22em;
+  }
+  .hud .kicker { font-size: 10px; color: #8d8d94; letter-spacing: 0.34em; margin-bottom: 10px; }
+  .hud h1 { margin: 0; font-size: clamp(22px, 3.2vw, 42px); font-weight: 300; letter-spacing: 0.16em; }
+  .hud h1 b { font-weight: 700; letter-spacing: 0.06em; }
+  .hud .rule { width: 54px; height: 1px; background: #6d6d74; margin: 16px 0 12px; }
+  .hud .sub { font-size: 10px; color: #85858c; letter-spacing: 0.18em; line-height: 1.8; }
+  .footer {
+    position: fixed; left: 34px; bottom: 28px; pointer-events: none;
+    font-size: 9px; letter-spacing: 0.20em; color: #6c6c73; text-transform: uppercase; line-height: 1.8;
+  }
+  .footer span { color: #a8a8ae; }
+  .viewtag {
+    position: fixed; right: 34px; top: 32px; pointer-events: none;
+    font-size: 9px; letter-spacing: 0.22em; color: #7f7f87; text-transform: uppercase;
+    border: 1px solid rgba(255,255,255,0.12); padding: 8px 12px; border-radius: 999px;
+    backdrop-filter: blur(8px);
+  }
+  .loading {
+    position: fixed; inset: 0; display: grid; place-items: center; background: #050506;
+    transition: opacity .7s ease; z-index: 20; letter-spacing: .28em; font-size: 10px; color: #8b8b92;
+    text-transform: uppercase;
+  }
+  .loading.hidden { opacity: 0; pointer-events: none; }
+  .screenshot .hud, .screenshot .footer, .screenshot .viewtag { display: none; }
+  .screenshot .vignette { background: radial-gradient(ellipse at 50% 45%, rgba(255,255,255,0.03), transparent 45%),
+                                     radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,0.48) 100%); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="vignette"></div>
+<div class="hud">
+  <div class="kicker">Reference monitor / 12 inch</div>
+  <h1>SW<b>-12</b></h1>
+  <div class="rule"></div>
+  <div class="sub">Cast-frame subwoofer driver<br/>Vented enclosure · 540 × 680 × 580 mm</div>
+</div>
+<div class="viewtag">Orbit / scroll to inspect</div>
+<div class="footer">OBJ + MTL · procedural hard-surface model<br/><span>125k vertices / 180k triangles</span></div>
+<div class="loading" id="loading">Loading SW-12 geometry</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/": "./node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const view = params.get('view') || 'hero';
+const screenshot = params.get('screenshot') === '1';
+if (screenshot) document.body.classList.add('screenshot');
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
+renderer.setPixelRatio(screenshot ? 1 : Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050506);
+scene.fog = new THREE.FogExp2(0x050506, 0.055);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.045).texture;
+scene.environmentIntensity = 0.38;
+
+const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.02, 30);
+
+const views = {
+  hero:   { pos: [1.02, 0.62, 1.62], target: [0.00, 0.00, 0.02] },
+  front:  { pos: [0.00, 0.13, 2.05], target: [0.00, 0.02, 0.00] },
+  side:   { pos: [1.95, 0.28, 0.14], target: [0.00, 0.02, 0.00] },
+  rear:   { pos: [-0.95, 0.48, -1.72], target: [0.00, 0.03, -0.02] },
+  detail: { pos: [0.55, 0.28, 0.82], target: [0.00, 0.10, 0.12] },
+  top:    { pos: [0.80, 1.75, 1.15], target: [0.00, -0.02, 0.00] }
+};
+const v = views[view] || views.hero;
+camera.position.set(...v.pos);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(...v.target);
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
+controls.minDistance = 0.45;
+controls.maxDistance = 5.5;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.update();
+
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(8, 128),
+  new THREE.MeshStandardMaterial({ color: 0x08080a, roughness: 0.52, metalness: 0.1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.383;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const ring = new THREE.Mesh(
+  new THREE.RingGeometry(0.43, 0.435, 128),
+  new THREE.MeshBasicMaterial({ color: 0x242428, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
+);
+ring.rotation.x = -Math.PI / 2;
+ring.position.y = -0.3825;
+scene.add(ring);
+
+const key = new THREE.DirectionalLight(0xfff4e8, 3.2);
+key.position.set(1.8, 3.2, 2.4);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 8;
+key.shadow.camera.left = -1.4;
+key.shadow.camera.right = 1.4;
+key.shadow.camera.top = 1.4;
+key.shadow.camera.bottom = -1.4;
+key.shadow.bias = -0.00035;
+key.shadow.radius = 4;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0x9fb6d6, 1.25);
+fill.position.set(-2.2, 1.1, 1.5);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xdfe7ff, 3.0);
+rim.position.set(-0.6, 1.7, -2.3);
+scene.add(rim);
+
+// Soft rear fill so the plate-amp controls read in the rear inspection view.
+const rearFill = new THREE.DirectionalLight(0xc7d3e6, 2.0);
+rearFill.position.set(-1.4, 0.5, -2.2);
+scene.add(rearFill);
+
+const under = new THREE.PointLight(0x7186a6, 0.55, 1.6, 2.0);
+under.position.set(0.10, -0.30, 0.48);
+scene.add(under);
+
+const topSpot = new THREE.SpotLight(0xffffff, 9.0, 5.0, Math.PI * 0.20, 0.65, 1.6);
+topSpot.position.set(0.1, 2.3, 1.3);
+topSpot.target.position.set(0, 0.05, 0);
+scene.add(topSpot, topSpot.target);
+
+const loading = document.getElementById('loading');
+
+// Parse the PBR extension values (Pr / Pm) that Blender writes into the MTL.
+// MTLLoader only understands the legacy Phong fields, so build proper
+// MeshStandardMaterials from the authored roughness/metalness values.
+const mtlText = await fetch('subwoofer_SW12.mtl').then((r) => r.text());
+const pbrByName = {};
+let pbrCurrent = null;
+for (const raw of mtlText.split(/\r?\n/)) {
+  const parts = raw.trim().split(/\s+/);
+  if (!parts[0]) continue;
+  if (parts[0] === 'newmtl') {
+    pbrCurrent = { roughness: 0.5, metalness: 0.0 };
+    pbrByName[parts.slice(1).join(' ')] = pbrCurrent;
+  } else if (pbrCurrent) {
+    if (parts[0] === 'Pr') pbrCurrent.roughness = parseFloat(parts[1]);
+    if (parts[0] === 'Pm') pbrCurrent.metalness = parseFloat(parts[1]);
+  }
+}
+
+const mtlLoader = new MTLLoader();
+mtlLoader.load('subwoofer_SW12.mtl', (materials) => {
+  materials.preload();
+  window.__MATS__ = materials;
+  for (const m of Object.values(materials.materials)) {
+    if (!m) continue;
+    if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+    m.envMapIntensity = 0.8;
+  }
+  const objLoader = new OBJLoader();
+  objLoader.setMaterials(materials);
+  objLoader.load('subwoofer_SW12.obj', (obj) => {
+    const standardCache = new Map();
+    obj.traverse((child) => {
+      if (!child.isMesh) return;
+      child.castShadow = true;
+      child.receiveShadow = true;
+      const src = child.material;
+      if (!src) return;
+      const key = src.name || 'default';
+      let mat = standardCache.get(key);
+      if (!mat) {
+        const pbr = pbrByName[key] || { roughness: 0.55, metalness: 0.0 };
+        mat = new THREE.MeshStandardMaterial({
+          name: key,
+          color: src.color ? src.color.clone() : new THREE.Color(0.5, 0.5, 0.5),
+          roughness: pbr.roughness,
+          metalness: pbr.metalness,
+          emissive: src.emissive ? src.emissive.clone() : new THREE.Color(0, 0, 0),
+          emissiveIntensity: src.emissiveIntensity || 1,
+          opacity: src.opacity,
+          transparent: src.transparent || src.opacity < 1,
+          side: THREE.FrontSide,
+        });
+        mat.envMapIntensity = 0.9;
+        standardCache.set(key, mat);
+      }
+      child.material = mat;
+    });
+    scene.add(obj);
+    window.__MODEL__ = obj;
+    window.__SCENE__ = scene;
+    window.__CAMERA__ = camera;
+    window.__THREE__ = THREE;
+    loading.classList.add('hidden');
+    renderer.render(scene, camera);
+    window.__READY__ = true;
+  }, undefined, (err) => {
+    loading.textContent = 'Failed to load OBJ';
+    console.error(err);
+  });
+}, undefined, (err) => {
+  loading.textContent = 'Failed to load MTL';
+  console.error(err);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(screenshot ? 1 : Math.min(devicePixelRatio, 2));
+  renderer.render(scene, camera);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

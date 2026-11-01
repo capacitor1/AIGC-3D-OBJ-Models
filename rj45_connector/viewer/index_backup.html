@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>RJ45 8P8C shielded jack — OBJ preview</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e9eaec; }
+  #app { width: 100vw; height: 100vh; }
+  #hud {
+    position: fixed; left: 18px; bottom: 16px; z-index: 10;
+    font: 12px/1.55 "Segoe UI", Arial, sans-serif; color: #4a4d52;
+    letter-spacing: .02em; pointer-events: none;
+  }
+  #hud b { color: #23262a; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="hud"><b>RJ45 (8P8C) shielded jack</b><br>13.6 × 16.2 × 13.5 mm · green / amber LEDs</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./libs/three.module.js",
+    "three/addons/": "./libs/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/OBJLoader.js';
+import { MTLLoader } from 'three/addons/MTLLoader.js';
+import { RoomEnvironment } from 'three/addons/RoomEnvironment.js';
+import { RGBELoader } from 'three/addons/RGBELoader.js';
+
+const params = new URLSearchParams(location.search);
+const view = params.get('view') || 'persp';
+
+// ---------------------------------------------------------------- renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.85;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe9eaec);
+scene.fog = new THREE.Fog(0xe9eaec, 70, 150);
+
+
+// studio environment: soft gradient + bright softboxes, gives nickel real highlights
+function makeStudioEnv() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.00, '#ffffff');
+  grad.addColorStop(0.35, '#dfe3e8');
+  grad.addColorStop(0.52, '#9aa0a8');
+  grad.addColorStop(0.70, '#4a4e54');
+  grad.addColorStop(1.00, '#22252a');
+  g.fillStyle = grad; g.fillRect(0, 0, 1024, 512);
+  function glow(x, y, rx, ry, col) {
+    g.save(); g.translate(x, y); g.scale(rx, ry);
+    const rg = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    rg.addColorStop(0, col); rg.addColorStop(0.45, col.replace(/[\d.]+\)$/, '0.55)'));
+    rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 1, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+  glow(205, 118, 150, 82, 'rgba(255,255,255,1)');
+  glow(735, 155, 120, 68, 'rgba(255,252,244,0.95)');
+  glow(480, 70, 230, 45, 'rgba(255,255,255,0.85)');
+  glow(60, 300, 120, 55, 'rgba(255,255,255,0.35)');
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pm = new THREE.PMREMGenerator(renderer);
+  return pm.fromEquirectangular(tex).texture;
+}
+const envTex = makeStudioEnv();
+scene.environment = envTex;
+
+// a real studio HDRI gives the nickel believable reflections
+function softboxTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(128, 128, 8, 128, 128, 128);
+  rg.addColorStop(0, 'rgba(255,255,255,1)');
+  rg.addColorStop(0.35, 'rgba(255,255,255,0.92)');
+  rg.addColorStop(0.72, 'rgba(255,255,255,0.30)');
+  rg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
+const hdriName = params.get('hdri') || 'studio_small_08';
+new RGBELoader().setPath('./libs/').load(hdriName + '.hdr', (hdr) => {
+  hdr.mapping = THREE.EquirectangularReflectionMapping;
+  const envScene = new THREE.Scene();
+  envScene.background = hdr;
+  const sbTex = softboxTexture();
+  function softbox(pos, w, h, power) {
+    const mat = new THREE.MeshBasicMaterial({
+      map: sbTex, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, color: new THREE.Color(power, power, power),
+      side: THREE.DoubleSide,
+    });
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    p.position.set(...pos);
+    p.lookAt(0, 6, -7);
+    envScene.add(p);
+  }
+  softbox([0, 1, -38], 50, 55, 1.0);
+  softbox([0, 30, 38], 62, 38, 1.6);
+  softbox([0, 8, 45], 64, 34, 2.6);
+  softbox([12, 9, -20], 24, 20, 0.9);
+  softbox([-30, 10, 6], 30, 30, 1.15);
+  softbox([0, 32, -8], 38, 22, 0.75);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(envScene, 0.02).texture;
+  hdr.dispose();
+  renderer.render(scene, camera);
+});
+
+// soft studio floor with a radial falloff
+function floorTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 1024;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(512, 512, 60, 512, 512, 512);
+  rg.addColorStop(0, '#ffffff');
+  rg.addColorStop(0.55, '#f4f5f6');
+  rg.addColorStop(0.85, '#e6e8ea');
+  rg.addColorStop(1, '#dfe2e5');
+  g.fillStyle = rg; g.fillRect(0, 0, 1024, 1024);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ---------------------------------------------------------------- camera
+const camera = new THREE.PerspectiveCamera(31, window.innerWidth / window.innerHeight, 0.1, 300);
+const target = new THREE.Vector3(0, 6.35, -7.4);
+const views = {
+  persp:  [20.0, 24.0, 25.5],
+  front:  [0.0, 7.8, 39.0],
+  hero:   [16.0, 17.0, 32.0],
+  back:   [23.0, 13.0, -36.0],
+  top:    [0.6, 38.0, 2.0],
+  low:    [22.0, 4.0, 28.0],
+  port:   [8.0, 7.6, 22.0],
+};
+camera.position.fromArray(views[view] || views.persp);
+camera.lookAt(target);
+if (view === 'top') camera.up.set(0, 0, -1);
+
+// ---------------------------------------------------------------- lights
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8d93, 0.55));
+
+const key = new THREE.DirectionalLight(0xfff7ea, 3.1);
+key.position.set(19, 29, 21);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -26;
+key.shadow.camera.right = 26;
+key.shadow.camera.top = 26;
+key.shadow.camera.bottom = -26;
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 100;
+key.shadow.bias = -0.0004;
+key.shadow.radius = 4;
+key.shadow.normalBias = 0.02;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0xdfe9ff, 1.5);
+fill.position.set(-24, 12, 14);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xffffff, 2.2);
+rim.position.set(-8, 18, -32);
+scene.add(rim);
+
+const kick = new THREE.DirectionalLight(0xffffff, 0.9);
+kick.position.set(10, 3, 24);
+scene.add(kick);
+
+const sheen = new THREE.PointLight(0xfff4e6, 260, 120, 2.0);
+sheen.position.set(13, 18, 31);
+scene.add(sheen);
+
+// ---------------------------------------------------------------- ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(400, 400),
+  new THREE.MeshStandardMaterial({ map: floorTexture(), color: 0xffffff, roughness: 0.90, metalness: 0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -2.85;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// soft radial contact shadow under the part
+function blobTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(256, 256, 20, 256, 256, 256);
+  rg.addColorStop(0, 'rgba(0,0,0,0.34)');
+  rg.addColorStop(0.45, 'rgba(0,0,0,0.16)');
+  rg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 512, 512);
+  return new THREE.CanvasTexture(c);
+}
+const blob = new THREE.Mesh(
+  new THREE.PlaneGeometry(30, 24),
+  new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false })
+);
+blob.rotation.x = -Math.PI / 2;
+blob.position.set(0, -2.83, -7.5);
+scene.add(blob);
+
+// ---------------------------------------------------------------- materials
+const custom = {
+  Shield:      { color: 0xc2c6cb, metalness: 1.0,  roughness: 0.225, envMapIntensity: 1.25 },
+  ShieldEdge:  { color: 0xa8adb3, metalness: 1.0,  roughness: 0.30,  envMapIntensity: 1.15 },
+  ShieldInner: { color: 0x454a50, metalness: 0.85, roughness: 0.48,  envMapIntensity: 1.0 },
+  PlasticBlack:{ color: 0x07080a, metalness: 0.0,  roughness: 0.70, envMapIntensity: 0.05 },
+  PlasticDark: { color: 0x141519, metalness: 0.0,  roughness: 0.66, envMapIntensity: 0.08 },
+  PlasticGrey: { color: 0x303237, metalness: 0.0,  roughness: 0.44 },
+  Gold:        { color: 0xc9a35c, metalness: 1.0,  roughness: 0.255, envMapIntensity: 1.6 },
+  GoldTip:     { color: 0xd9ad5e, metalness: 1.0,  roughness: 0.24,  envMapIntensity: 1.2 },
+  Tin:         { color: 0xc9ccd0, metalness: 1.0,  roughness: 0.26,  envMapIntensity: 1.5 },
+  LEDGreen:    { color: 0x1fbf3a, emissive: 0x075a14, emissiveIntensity: 0.60, metalness: 0.0, roughness: 0.20 },
+  LEDGreenHot: { color: 0x53ff7a, emissive: 0x1fff4a, emissiveIntensity: 1.70, metalness: 0.0, roughness: 0.18 },
+  LEDAmber:    { color: 0xff5a00, emissive: 0x8a2800, emissiveIntensity: 0.85, metalness: 0.0, roughness: 0.20 },
+  LEDAmberHot: { color: 0xff9a20, emissive: 0xff5a00, emissiveIntensity: 1.70, metalness: 0.0, roughness: 0.16 },
+  ClearLens:   { color: 0xe7f3ec, metalness: 0.0, roughness: 0.05, transparent: true, opacity: 0.22, envMapIntensity: 1.0 },
+  WireGreen:   { color: 0x16702a, metalness: 0.0, roughness: 0.52 },
+  WireAmber:   { color: 0xb05504, metalness: 0.0, roughness: 0.52 },
+  PCB:         { color: 0x0d5a2a, metalness: 0.0, roughness: 0.6 },
+};
+
+function makeMat(old) {
+  const name = old?.name || '';
+  const c = custom[name];
+  const opts = c ? { ...c } : {
+    color: old?.color ? old.color.clone() : new THREE.Color(0xcccccc),
+    metalness: 0.05, roughness: 0.55,
+  };
+  const mat = new THREE.MeshStandardMaterial(opts);
+  mat.name = name;
+  mat.side = THREE.FrontSide;
+  return mat;
+}
+
+function tune(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const isArray = Array.isArray(o.material);
+    const olds = isArray ? o.material : [o.material];
+    const news = olds.map(makeMat);
+    o.material = isArray ? news : news[0];
+    o.castShadow = true;
+    o.receiveShadow = true;
+    olds.forEach((m) => { if (m && m.dispose) m.dispose(); });
+  });
+}
+
+// ---------------------------------------------------------------- probe
+if (params.get('probe') === '1') {
+  const sph = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 32),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1.0, roughness: 0.02 }));
+  sph.position.set(0, 7, 0);
+  scene.add(sph);
+}
+
+// ---------------------------------------------------------------- load
+let model = null;
+const mtlLoader = new MTLLoader();
+mtlLoader.setPath('../');
+mtlLoader.load('rj45_connector.mtl', (materials) => {
+  materials.preload();
+  const objLoader = new OBJLoader();
+  objLoader.setMaterials(materials);
+  objLoader.setPath('../');
+  objLoader.load('rj45_connector.obj', (obj) => {
+    tune(obj);
+    obj.position.set(0, 0, 0);
+    scene.add(obj);
+    model = obj;
+    if (params.get('probe') === '1') obj.visible = false;
+    renderer.render(scene, camera);
+    window.__ready = true;
+    requestAnimationFrame(() => { renderer.render(scene, camera); });
+  }, undefined, (err) => {
+    console.error(err);
+    document.getElementById('hud').textContent = 'Failed to load OBJ: ' + err;
+  });
+}, undefined, (err) => {
+  console.error(err);
+  document.getElementById('hud').textContent = 'Failed to load MTL: ' + err;
+});
+
+// ---------------------------------------------------------------- loop
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', onResize);
+
+renderer.setAnimationLoop(() => {
+  if (model) {
+    // extremely slow turntable only when requested (?spin=1)
+    if (params.get('spin') === '1') model.rotation.y += 0.0025;
+  }
+  renderer.render(scene, camera);
+});
+
+// expose for screenshot automation
+window.__setView = (name) => {
+  const v = views[name] || views.persp;
+  camera.position.fromArray(v);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+};
+</script>
+</body>
+</html>
