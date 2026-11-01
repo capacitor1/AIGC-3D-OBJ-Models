@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>M.2 2280 SSD preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d10; overflow: hidden; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; left: 18px; bottom: 16px; color: #aeb6c2;
+    font: 12px/1.45 ui-monospace, Consolas, monospace;
+    letter-spacing: .02em; pointer-events: none; text-shadow: 0 1px 4px #000;
+    opacity: .8;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/": "./node_modules/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="hud"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const viewName = params.get('view') || 'hero';
+const W = window.innerWidth, H = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(W, H);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0d10);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+// lighting
+const hemi = new THREE.HemisphereLight(0xffffff, 0x141820, 0.30);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xfff6ea, 1.7);
+key.position.set(30, 65, 35);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -60;
+key.shadow.camera.right = 60;
+key.shadow.camera.top = 40;
+key.shadow.camera.bottom = -40;
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 200;
+key.shadow.bias = -0.0005;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0xb9d0ff, 0.55);
+fill.position.set(-35, 30, -25);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xffd8a8, 0.75);
+rim.position.set(90, 18, -50);
+scene.add(rim);
+
+if (viewName.startsWith('bottom')) {
+  const bottomFill = new THREE.DirectionalLight(0xffffff, 2.4);
+  bottomFill.position.set(45, -55, 10);
+  scene.add(bottomFill);
+}
+
+// ground / studio floor
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(95, 96),
+  new THREE.MeshStandardMaterial({ color: 0x171b21, roughness: 0.72, metalness: 0.05 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -1.7;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const matSpec = {
+  Gold:          { metalness: 1.0, roughness: 0.23 },
+  Gold_Dark:     { metalness: 1.0, roughness: 0.34 },
+  Copper:        { metalness: 1.0, roughness: 0.30 },
+  Solder:        { metalness: 0.85, roughness: 0.30 },
+  Cap_Terminal:  { metalness: 0.75, roughness: 0.34 },
+  Res_Terminal:  { metalness: 0.75, roughness: 0.34 },
+  Crystal_Metal: { metalness: 0.9, roughness: 0.20 },
+  Polymer_Top:   { metalness: 0.65, roughness: 0.32 },
+  PCB_Black:     { metalness: 0.05, roughness: 0.48 },
+  PCB_Edge:      { metalness: 0.0, roughness: 0.85 },
+  PCB_Dark:      { metalness: 0.0, roughness: 0.9 },
+  Chip_Black:    { metalness: 0.0, roughness: 0.42 },
+  Chip_Dark:     { metalness: 0.0, roughness: 0.45 },
+  Chip_Edge:     { metalness: 0.0, roughness: 0.55 },
+  QFN_Body:      { metalness: 0.0, roughness: 0.42 },
+  Inductor_Body: { metalness: 0.12, roughness: 0.50 },
+  Inductor_Top:  { metalness: 0.12, roughness: 0.50 },
+  Cap_Body:      { metalness: 0.0, roughness: 0.55 },
+  Res_Body:      { metalness: 0.0, roughness: 0.50 },
+  Polymer_Body:  { metalness: 0.05, roughness: 0.45 },
+  Silkscreen:    { metalness: 0.0, roughness: 0.88 },
+  Marking_White: { metalness: 0.0, roughness: 0.80 },
+  Marking_Gray:  { metalness: 0.0, roughness: 0.75 },
+};
+
+const view = {
+  hero:       { pos: [112, 62, 66], look: [40, 0, 0], fov: 30 },
+  top:        { pos: [40, 195, 0.01], look: [40, 0, 0], fov: 25, up: [0, 0, -1] },
+  top_angle:  { pos: [40, 82, 50], look: [40, 0, 0], fov: 30 },
+  controller: { pos: [36, 25, 25], look: [18.5, 0.9, 0], fov: 31 },
+  nand:       { pos: [59, 27, 30], look: [55.0, 0.9, 0], fov: 31 },
+  connector:  { pos: [17, 14, 16], look: [2.0, 0.5, 0], fov: 34 },
+  tail:       { pos: [66, 16, 18], look: [74.0, 0.6, 0], fov: 34 },
+  bottom:     { pos: [40, -195, 0.01], look: [40, 0, 0], fov: 25, up: [0, 0, 1], hideGround: true },
+  bottom_angle:{ pos: [40, -70, 45], look: [40, 0, 0], fov: 30, hideGround: true },
+};
+const baseView = viewName.replace('_debug', '');
+const cfg = view[baseView] || view.hero;
+const debugView = viewName.endsWith('_debug');
+
+const camera = new THREE.PerspectiveCamera(cfg.fov, W / H, 0.1, 1000);
+camera.position.set(...cfg.pos);
+if (cfg.up) camera.up.set(...cfg.up);
+camera.lookAt(new THREE.Vector3(...cfg.look));
+if (cfg.hideGround) ground.visible = false;
+if (debugView) {
+  scene.background = new THREE.Color(0xcfd6df);
+  ground.visible = false;
+}
+
+document.getElementById('hud').textContent =
+  `M.2 2280 NVMe SSD  |  ${viewName}  |  procedural OBJ`;
+
+const mtlLoader = new MTLLoader();
+mtlLoader.load('./model/m2_ssd_2280.mtl', (mtl) => {
+  mtl.preload();
+  const objLoader = new OBJLoader();
+  objLoader.setMaterials(mtl);
+  objLoader.load('./model/m2_ssd_2280.obj', (obj) => {
+    function convert(oldMat) {
+      const name = oldMat && oldMat.name ? oldMat.name : '';
+      const spec = matSpec[name] || { metalness: 0.0, roughness: 0.55 };
+      const m = new THREE.MeshStandardMaterial({
+        color: oldMat && oldMat.color ? oldMat.color.clone() : new THREE.Color(0x888888),
+        metalness: spec.metalness,
+        roughness: spec.roughness,
+        side: THREE.FrontSide,
+        envMapIntensity: 0.9,
+      });
+      m.name = name;
+      return m;
+    }
+    obj.traverse((o) => {
+      if (!o.isMesh) return;
+      if (Array.isArray(o.material)) {
+        o.material = o.material.map(convert);
+      } else {
+        o.material = convert(o.material);
+      }
+      o.castShadow = true;
+      o.receiveShadow = true;
+      o.frustumCulled = true;
+    });
+    // center the board in its own local frame for easy viewing
+    obj.position.set(0, 0, 0);
+    scene.add(obj);
+
+    // frame check: gently fit if needed
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3());
+    console.log('model bounds', box.min.toArray(), box.max.toArray(), size.toArray());
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(() => {
+      renderer.render(scene, camera);
+      window.__ready = true;
+    });
+  }, undefined, (e) => { console.error('OBJ load error', e); window.__error = String(e); });
+}, undefined, (e) => { console.error('MTL load error', e); window.__error = String(e); });
+</script>
+</body>
+</html>

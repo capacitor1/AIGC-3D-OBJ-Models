@@ -1,0 +1,6 @@
+trimesh>=4.0
+numpy
+shapely
+matplotlib
+manifold3d
+Pillow

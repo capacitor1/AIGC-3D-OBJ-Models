@@ -1,0 +1,192 @@
+{
+  "name": "NXV ATX Gaming Desktop",
+  "units": "millimetres",
+  "orientation": {
+    "up": "+Y",
+    "front": "+Z",
+    "removable_panel": "-X"
+  },
+  "overall": {
+    "width": 234,
+    "height": 478,
+    "depth": 464
+  },
+  "files": {
+    "open": "desktop_pc_open.obj",
+    "closed": "desktop_pc_closed.obj",
+    "materials": "desktop_pc.mtl",
+    "components": "components/*.obj"
+  },
+  "components": [
+    {
+      "name": "case_frame",
+      "vertices": 3216,
+      "triangles": 6004
+    },
+    {
+      "name": "right_panel",
+      "vertices": 352,
+      "triangles": 664
+    },
+    {
+      "name": "front_panel",
+      "vertices": 38306,
+      "triangles": 20388
+    },
+    {
+      "name": "top_panel",
+      "vertices": 1624,
+      "triangles": 2876
+    },
+    {
+      "name": "rear_panel",
+      "vertices": 4994,
+      "triangles": 9556
+    },
+    {
+      "name": "feet",
+      "vertices": 1000,
+      "triangles": 1968
+    },
+    {
+      "name": "front_io",
+      "vertices": 858,
+      "triangles": 1660
+    },
+    {
+      "name": "motherboard",
+      "vertices": 8734,
+      "triangles": 16176
+    },
+    {
+      "name": "cpu",
+      "vertices": 106,
+      "triangles": 192
+    },
+    {
+      "name": "gpu",
+      "vertices": 9566,
+      "triangles": 18208
+    },
+    {
+      "name": "gpu_support",
+      "vertices": 244,
+      "triangles": 472
+    },
+    {
+      "name": "aio_fan_1",
+      "vertices": 3124,
+      "triangles": 5634
+    },
+    {
+      "name": "aio_fan_2",
+      "vertices": 3124,
+      "triangles": 5634
+    },
+    {
+      "name": "aio_fan_3",
+      "vertices": 3124,
+      "triangles": 5634
+    },
+    {
+      "name": "rear_fan",
+      "vertices": 3124,
+      "triangles": 5634
+    },
+    {
+      "name": "top_fan_1",
+      "vertices": 3124,
+      "triangles": 5634
+    },
+    {
+      "name": "top_fan_2",
+      "vertices": 3124,
+      "triangles": 5634
+    },
+    {
+      "name": "gpu_fan_1",
+      "vertices": 2692,
+      "triangles": 4786
+    },
+    {
+      "name": "gpu_fan_2",
+      "vertices": 2692,
+      "triangles": 4786
+    },
+    {
+      "name": "gpu_fan_3",
+      "vertices": 2692,
+      "triangles": 4786
+    },
+    {
+      "name": "aio_pump",
+      "vertices": 2138,
+      "triangles": 4184
+    },
+    {
+      "name": "aio_radiator",
+      "vertices": 4732,
+      "triangles": 9048
+    },
+    {
+      "name": "aio_tube_1",
+      "vertices": 314,
+      "triangles": 624
+    },
+    {
+      "name": "aio_tube_2",
+      "vertices": 334,
+      "triangles": 664
+    },
+    {
+      "name": "psu",
+      "vertices": 7322,
+      "triangles": 13748
+    },
+    {
+      "name": "ssd_2_5",
+      "vertices": 1344,
+      "triangles": 2588
+    },
+    {
+      "name": "hdd_3_5",
+      "vertices": 1000,
+      "triangles": 1952
+    },
+    {
+      "name": "cable_24pin",
+      "vertices": 1518,
+      "triangles": 2816
+    },
+    {
+      "name": "cable_eps",
+      "vertices": 704,
+      "triangles": 1320
+    },
+    {
+      "name": "cable_gpu",
+      "vertices": 956,
+      "triangles": 1788
+    },
+    {
+      "name": "cable_sata",
+      "vertices": 598,
+      "triangles": 1124
+    },
+    {
+      "name": "cable_front_panel",
+      "vertices": 458,
+      "triangles": 856
+    },
+    {
+      "name": "cable_aio",
+      "vertices": 50,
+      "triangles": 96
+    },
+    {
+      "name": "side_panel_glass",
+      "vertices": 592,
+      "triangles": 1104
+    }
+  ]
+}

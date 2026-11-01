@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NXV Desktop PC — OBJ viewer</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#07080b;color:#cfd6e4;font-family:Inter,Segoe UI,Arial,sans-serif}
+  #c{display:block;width:100vw;height:100vh}
+  #hud{position:fixed;left:22px;bottom:18px;font-size:12px;letter-spacing:.08em;color:#7d8798;text-transform:uppercase}
+  #hud b{color:#d9e1ee;font-weight:600}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;background:#07080b;z-index:9;transition:opacity .5s}
+  #loading .box{text-align:center}
+  #loading .bar{width:260px;height:2px;background:#1a2029;margin:16px auto;overflow:hidden}
+  #loading .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00c8ff,#ff2a9d);transition:width .2s}
+  #loading .t{font-size:12px;letter-spacing:.22em;color:#7c8799}
+  #loading .n{font-size:26px;font-weight:700;letter-spacing:.18em;color:#e7edf7;margin-bottom:8px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading"><div class="box"><div class="n">NXV</div><div class="t">LOADING ASSEMBLY</div><div class="bar"><i id="bar"></i></div></div></div>
+<div id="hud"><b>NXV ATX</b> &nbsp;·&nbsp; procedural OBJ &nbsp;·&nbsp; <span id="stats">—</span></div>
+<script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from '../node_modules/three/build/three.module.js';
+import { MTLLoader } from '../node_modules/three/examples/jsm/loaders/MTLLoader.js';
+import { OBJLoader } from '../node_modules/three/examples/jsm/loaders/OBJLoader.js';
+import { RoomEnvironment } from '../node_modules/three/examples/jsm/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const file = params.get('file') || 'open';
+const view = params.get('view') || 'frontleft';
+const W = parseInt(params.get('w')||'1200',10);
+const H = parseInt(params.get('h')||'900',10);
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(W,H,false);
+renderer.setClearColor(0x07080b,1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.95;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07080b);
+scene.fog = new THREE.FogExp2(0x07080b, 0.00115);
+
+const camera = new THREE.PerspectiveCamera(32, W/H, 5, 4000);
+
+// studio environment
+const pmrem = new THREE.PMREMGenerator(renderer);
+const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = env;
+
+// lights
+const key = new THREE.DirectionalLight(0xdfe9ff, 4.2);
+key.position.set(-420, 760, 520);
+key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+key.shadow.camera.left=-650; key.shadow.camera.right=650;
+key.shadow.camera.top=750; key.shadow.camera.bottom=-100;
+key.shadow.bias=-0.0004;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x8fb7ff, 2.2);
+fill.position.set(500, 260, 260); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xff3b9e, 1.8);
+rim.position.set(180, 300, -520); scene.add(rim);
+const back = new THREE.DirectionalLight(0xcfe0ff, 2.4);
+back.position.set(-80, 420, -900); scene.add(back);
+const backFill = new THREE.DirectionalLight(0x9fb7ff, 0.9);
+backFill.position.set(500, 260, -600); scene.add(backFill);
+const top = new THREE.PointLight(0x00d9ff, 1.6, 1400, 2);
+top.position.set(-120, 620, 80); scene.add(top);
+const interior = new THREE.PointLight(0xbfd8ff, 2.4, 1200, 2);
+interior.position.set(-360, 300, 330); scene.add(interior);
+const interior2 = new THREE.PointLight(0xbfd8ff, 1.0, 1000, 2);
+interior2.position.set(-220, 210, -280); scene.add(interior2);
+const openFill = new THREE.DirectionalLight(0xdbe7ff, 2.0);
+openFill.position.set(-850, 230, 180); scene.add(openFill);
+scene.add(new THREE.AmbientLight(0x6f8098, 0.72));
+const hemi = new THREE.HemisphereLight(0x9fc4ff, 0x24141b, 1.15); scene.add(hemi);
+
+// floor
+const floorMat = new THREE.MeshStandardMaterial({color:0x11151b, roughness:0.48, metalness:0.2});
+const floor = new THREE.Mesh(new THREE.CircleGeometry(1200, 96), floorMat);
+floor.rotation.x = -Math.PI/2; floor.position.y = -0.4; floor.receiveShadow = true; scene.add(floor);
+const grid = new THREE.GridHelper(1600, 64, 0x1a2430, 0x10161e);
+grid.position.y = 0.2; scene.add(grid);
+const ring = new THREE.Mesh(new THREE.RingGeometry(380,382,128), new THREE.MeshBasicMaterial({color:0x14212c, side:THREE.DoubleSide, transparent:true, opacity:.8}));
+ring.rotation.x=-Math.PI/2; ring.position.y=0.3; scene.add(ring);
+
+// load
+const mtlLoader = new MTLLoader();
+mtlLoader.load('../desktop_pc.mtl', (materials)=>{
+  materials.preload();
+  const metalRe = /steel|chrome|nickel|aluminum|brushed|copper|gold|radiator|socket/;
+  for (const k in materials.materials) {
+    const src = materials.materials[k];
+    if (!src) continue;
+    const name = src.name || k;
+    let m;
+    if (name === 'glass') {
+      m = new THREE.MeshStandardMaterial({
+        color: 0x4d6a80, metalness: 0.15, roughness: 0.05,
+        transparent: true, opacity: 0.20, side: THREE.DoubleSide,
+        depthWrite: false, envMapIntensity: 2.2
+      });
+    } else {
+      const isMetal = metalRe.test(name);
+      m = new THREE.MeshStandardMaterial({
+        color: src.color ? src.color.clone() : 0x888888,
+        metalness: isMetal ? 0.86 : 0.06,
+        roughness: isMetal ? 0.30 : 0.58,
+        emissive: src.emissive ? src.emissive.clone() : new THREE.Color(0x000000),
+        transparent: !!src.transparent,
+        opacity: src.opacity !== undefined ? src.opacity : 1.0,
+        side: src.side, depthWrite: src.depthWrite,
+        envMapIntensity: isMetal ? 1.35 : 0.85
+      });
+      if (name.startsWith('rgb_')) {
+        m.emissive.copy(src.color || new THREE.Color(0xffffff));
+        m.emissiveIntensity = 2.4;
+        m.toneMapped = false;
+        m.roughness = 0.35;
+      }
+    }
+    m.name = name;
+    materials.materials[k] = m;
+  }
+  const objLoader = new OBJLoader();
+  objLoader.setMaterials(materials);
+  objLoader.load('../desktop_pc_'+(file==='closed'?'closed':'open')+'.obj', (root)=>{
+    let tris=0;
+    root.traverse(o=>{
+      if(o.isMesh){
+        o.castShadow=true; o.receiveShadow=true;
+        if(o.material && o.material.transparent) o.renderOrder=2;
+        const g=o.geometry; if(g && g.index) tris+=g.index.count/3; else if(g) tris+=g.attributes.position.count/3;
+      }
+    });
+    scene.add(root);
+    document.getElementById('stats').textContent = Math.round(tris).toLocaleString()+' triangles';
+    // frame
+    const box = new THREE.Box3().setFromObject(root);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const presets = {
+      frontleft: {p:[-700, 380, 720], t:[0, 240, 0], f:32},
+      side:      {p:[-900, 320, 50],  t:[0, 240, 0], f:32},
+      front:     {p:[0, 320, 900],    t:[0, 245, 0], f:31},
+      rear:      {p:[0, 320, -900],   t:[0, 245, 0], f:31},
+      top:       {p:[0, 1050, 430],   t:[0, 200, -10], f:34},
+      gpu:       {p:[-760, 280, 520], t:[-5, 225, 0], f:34},
+      low:       {p:[-700, 165, 700], t:[0, 225, 0], f:33},
+      closed:    {p:[-700, 380, 720], t:[0, 240, 0], f:32},
+    };
+    const v = presets[view] || presets.frontleft;
+    const target = new THREE.Vector3(center.x, center.y*0.96, center.z);
+    const dir = new THREE.Vector3(...v.p).sub(new THREE.Vector3(...v.t)).normalize();
+    const vFov = THREE.MathUtils.degToRad(v.f);
+    const hFov = 2*Math.atan(Math.tan(vFov/2)*W/H);
+    const distV = size.y/(2*Math.tan(vFov/2));
+    const distH = Math.max(size.x,size.z)/(2*Math.tan(hFov/2));
+    const dist = Math.max(distV,distH)*1.26;
+    camera.position.copy(target).add(dir.multiplyScalar(dist));
+    camera.fov=v.f; camera.near=5; camera.far=4000; camera.updateProjectionMatrix();
+    camera.lookAt(target);
+    // soft shadow catcher / ambient bounce
+    renderer.render(scene,camera);
+    requestAnimationFrame(()=>{
+      document.getElementById('loading').style.opacity='0';
+      setTimeout(()=>document.getElementById('loading').remove(),450);
+      window.__ready=true;
+    });
+  }, (xhr)=>{
+    if(xhr.total) document.getElementById('bar').style.width=(xhr.loaded/xhr.total*100).toFixed(1)+'%';
+  }, (err)=>{ console.error(err); document.getElementById('loading').innerHTML='<div style="color:#f66">Load error</div>'; });
+});
+// expose a render function for puppeteer
+window.__render = ()=>renderer.render(scene,camera);
+</script>
+</body>
+</html>
